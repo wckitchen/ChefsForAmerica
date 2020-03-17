@@ -2,25 +2,207 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Display a map</title>
+<title>WCK response to the closure of American schools</title>
 <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-<script src="https://api.mapbox.com/mapbox-gl-js/v1.8.0/mapbox-gl.js"></script>
-<link href="https://api.mapbox.com/mapbox-gl-js/v1.8.0/mapbox-gl.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.8.1/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.8.1/mapbox-gl.css" rel="stylesheet" />
+<script src="tabletop.min.js"></script>
 <style>
 	body { margin: 0; padding: 0; }
 	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+	.heading {
+		font-weight: bold;
+	}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
+
+// NCES ID - District ID: "3620700"
+// Agency Name: "NEWBURGH CITY SCHOOL DISTRICT"
+// State Agency ID: "NY-441600010000"
+// Web Site URL: "http://www.newburghschools.org"
+// Feeding URL: "https://www.newburghschools.org/"
+// Breakfast: "YES"
+// Lunch: "YES"
+// Dinner: ""
+// Location Address: "124 GRAND ST"
+// City: "NEWBURGH"
+// County Name: "Orange County"
+// State: "NEW YORK"
+// ZIP: "12550"
+// Free and Reduced Lunch Students: "6618"
+// Students, All Grades: "11462"
+// % Free lunch: "57.74%"
+// #of Public Schools: "12"
+// Stud-Pop/School: "955.17"
+
 	mapboxgl.accessToken = 'pk.eyJ1Ijoid2NraGJhc2UiLCJhIjoiY2p0NGc0aWkyMTRybjQ0cGh6NmhrZWdzaCJ9.Na6CPyIWu6NZ_txt0JdUIA';
-var map = new mapboxgl.Map({
-container: 'map', // container id
-style: 'mapbox://styles/wckhbase/ck7uk9c9e0sdh1isb56k0ayid', // stylesheet location
-center: [-96.004583, 38.023510], // starting position [lng, lat]
-zoom: 3.55 // starting zoom
-});
+  const map = new mapboxgl.Map({
+      container: 'map', // container id
+      style: 'mapbox://styles/wckhbase/ck7uk9c9e0sdh1isb56k0ayid?fresh=true', // stylesheet location
+      center: [-74.5, 40], // starting position [lng, lat]
+      zoom: 5 // starting zoom
+  });
+  let hoveredStateId = null;
+	const popup = new mapboxgl.Popup({
+		closeButton: true,
+		closeOnClick: false
+	});
+const ids = [];
+		map.on('load', () => {
+			Tabletop.init( {
+		    key: '1UgnKWTR3T7x0fCXta8AhDtEBh1mHe_PCgZrdLmO1FZ8',
+		    simpleSheet: true }
+		  ).then(function(data, tabletop) {
+				console.log('data received');
+				data.forEach((row) => {
+					ids.push(row['NCES ID - District ID']);
+				})
+		    initFeatureState(data)
+		  })
+
+			const initFeatureState = (data) => {
+				map.addSource('schools', {
+					type: 'vector',
+					url: 'mapbox://wckhbase.3q7a7118',
+					promoteId: 'GEOID'
+				})
+
+				console.log(ids)
+				map.addLayer({
+					id: 'school-district',
+					source: 'schools',
+					'source-layer': 'schooldistrict_lite-29mzfw',
+					type: 'fill',
+					paint: {
+						'fill-color': '#d76353'
+					},
+					filter: 	['match',
+						['get', 'GEOID'],
+						[...new Set(ids)],
+						true,
+						false
+					]
+				}, 'waterway-label');
+
+				map.addLayer({
+					id: 'school-district-line',
+					source: 'schools',
+					'source-layer': 'schooldistrict_lite-29mzfw',
+					type: 'line',
+					paint: {
+						'line-color': ['case',
+						['boolean', ['feature-state', 'hover'], false],
+								'rgb(18, 17, 17)',
+								'rgb(208, 208, 208)'
+							],
+						'line-width': 1
+					},
+					filter: ['match',
+						['get', 'GEOID'],
+						[...new Set(ids)],
+						true,
+						false
+					]
+				}, 'waterway-label');
+
+				// When the user moves their mouse over the state-fill layer, we'll update the
+			// feature state for the feature under the mouse.
+				map.on('mousemove', 'school-district', function(e) {
+					map.getCanvas().style.cursor = 'pointer';
+					if (e.features.length > 0) {
+						if (hoveredStateId) {
+							map.setFeatureState({
+								source: 'schools',
+								'sourceLayer': 'schooldistrict_lite-29mzfw',
+								id: hoveredStateId
+							}, {
+								hover: false
+							});
+						}
+						hoveredStateId = e.features[0].id;
+						map.setFeatureState({
+							source: 'schools',
+							'sourceLayer': 'schooldistrict_lite-29mzfw',
+							id: hoveredStateId
+						}, {
+							hover: true
+						});
+					}
+				});
+
+				map.on('click', 'school-district', function(e) {
+
+						const district = data.find((r) => {
+							return r['NCES ID - District ID'] == e.features[0].properties.GEOID
+						})
+
+						const description = `
+						<p><span class="heading">Agency Name:</span> ${district['Agency Name']}</p>
+						<p><span class="heading">Feeding URL:</span> <a href="${district['Feeding URL']}">link</a></p>
+						<p><span class="heading">Serves breakfast:</span> ${district['Breakfast'] == '' ? 'No' : district['Breakfast']}</p>
+						<p><span class="heading">Serves lunch:</span> ${district['Lunch'] == '' ? 'No' : district['Lunch']}</p>
+						<p><span class="heading">Serves dinner:</span> ${district['Dinner'] == '' ? 'No' : district['Dinner']}</p>
+						<p><span class="heading">Address:</span> ${district['Location Address']}, ${district['City']}, ${district['State']}</p>`
+
+					popup
+						.setLngLat(e.lngLat)
+						.setHTML(description)
+						.addTo(map);
+				});
+
+
+				// When the mouse leaves the state-fill layer, update the feature state of the
+				// previously hovered feature.
+				map.on('mouseleave', 'school-district', function() {
+					if (hoveredStateId) {
+						map.setFeatureState({
+							source: 'schools',
+							'sourceLayer': 'schooldistrict_lite-29mzfw',
+							id: hoveredStateId
+						}, {
+							hover: false
+						});
+					}
+					hoveredStateId = null;
+					map.getCanvas().style.cursor = '';
+				});
+
+				// const setStates = (data) => {
+				// 	console.log('setting states');
+				// 	const arr = [];
+				// 	data.forEach((row) => {
+				// 		// map.setFeatureState({
+				// 		// 	source: 'schools',
+				// 		// 	'sourceLayer': 'schooldistrict_lite-29mzfw',
+				// 		// 	id: row['NCES ID - District ID']
+				// 		// }, {
+				// 		// 	meals: 'yes'
+				// 		// })
+				// 		arr.push(row['NCES ID - District ID']);
+				// 	})
+				//
+				// }
+
+				// Check if `statesData` source is loaded.
+				// const setAfterLoad = (e) => {
+				// 	if (e.sourceId === 'schools' && e.isSourceLoaded) {
+				// 		setStates(data);
+				// 		map.off('sourcedata', setAfterLoad);
+				// 		console.log('loaded');
+				// 	}
+				// }
+
+				// // If `statesData` source is loaded, call `setStates()`.
+				// if (map.isSourceLoaded('schools')) {
+				// 	setStates(data);
+				// } else {
+				// 	map.on('sourcedata', setAfterLoad);
+				// }
+			}
+		})
 </script>
 
 </body>
